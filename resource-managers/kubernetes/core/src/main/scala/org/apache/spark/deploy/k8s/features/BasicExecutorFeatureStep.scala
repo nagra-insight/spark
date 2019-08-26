@@ -24,6 +24,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.KubernetesUtils
 import org.apache.spark.internal.config.{EXECUTOR_CLASS_PATH, EXECUTOR_JAVA_OPTIONS, EXECUTOR_MEMORY, EXECUTOR_MEMORY_OVERHEAD, PYSPARK_EXECUTOR_MEMORY}
 import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
@@ -78,6 +79,10 @@ private[spark] class BasicExecutorFeatureStep(
     }
   private val executorLimitCores = kubernetesConf.get(KUBERNETES_EXECUTOR_LIMIT_CORES)
 
+  private val executorStorage = kubernetesConf.get(KUBERNETES_EXECUTOR_STORAGE)
+
+  private val executorTolerations = kubernetesConf.get(KUBERNETES_EXECUTOR_TOLERATIONS)
+
   override def configurePod(pod: SparkPod): SparkPod = {
     val name = s"$executorPodNamePrefix-exec-${kubernetesConf.roleSpecificConf.executorId}"
 
@@ -91,6 +96,7 @@ private[spark] class BasicExecutorFeatureStep(
     val executorCpuQuantity = new QuantityBuilder(false)
       .withAmount(executorCoresRequest)
       .build()
+
     val executorExtraClasspathEnv = executorExtraClasspath.map { cp =>
       new EnvVarBuilder()
         .withName(ENV_CLASSPATH)
@@ -138,7 +144,7 @@ private[spark] class BasicExecutorFeatureStep(
           .build()
       }
 
-    val executorContainer = new ContainerBuilder(pod.container)
+    val executorContainerBuilder = new ContainerBuilder(pod.container)
       .withName("executor")
       .withImage(executorContainerImage)
       .withImagePullPolicy(kubernetesConf.imagePullPolicy())
@@ -150,7 +156,20 @@ private[spark] class BasicExecutorFeatureStep(
       .addAllToEnv(executorEnv.asJava)
       .withPorts(requiredPorts.asJava)
       .addToArgs("executor")
-      .build()
+    
+    executorStorage.foreach { storage =>
+      val executorStorageQuantity = new QuantityBuilder(false)
+        .withAmount(storage)
+        .build()
+
+      executorContainerBuilder
+        .editResources()
+        .addToRequests("ephemeral-storage", executorStorageQuantity)
+        .addToLimits("ephemeral-storage", executorStorageQuantity)
+        .endResources()
+    }
+
+    val executorContainer = executorContainerBuilder.build()
     val containerWithLimitCores = executorLimitCores.map { limitCores =>
       val executorCpuLimitQuantity = new QuantityBuilder(false)
         .withAmount(limitCores)
@@ -181,6 +200,7 @@ private[spark] class BasicExecutorFeatureStep(
         .withHostname(hostname)
         .withRestartPolicy("Never")
         .withNodeSelector(kubernetesConf.nodeSelector().asJava)
+        .withTolerations(KubernetesUtils.parseTolerations(executorTolerations.getOrElse("")).asJava)
         .addToImagePullSecrets(kubernetesConf.imagePullSecrets(): _*)
         .endSpec()
       .build()

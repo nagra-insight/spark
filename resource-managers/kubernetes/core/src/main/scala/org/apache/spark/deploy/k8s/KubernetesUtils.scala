@@ -16,6 +16,7 @@
  */
 package org.apache.spark.deploy.k8s
 
+import io.fabric8.kubernetes.api.model.Toleration
 import org.apache.spark.SparkConf
 import org.apache.spark.util.Utils
 
@@ -60,4 +61,15 @@ private[spark] object KubernetesUtils {
   }
 
   def parseMasterUrl(url: String): String = url.substring("k8s://".length)
+
+  private val tolerationRe = """([^=:]+)=([^=:]+):([^=:]+)""".r
+
+  def parseTolerations(value: String): Seq[Toleration] =
+    value.split(",").map {
+      _ match {
+        case tolerationRe(key, value, effect) =>
+          Some(new Toleration(effect, key, "Equal", null, value))
+        case _ => None
+      }
+    }.filter(_.isDefined).map(_.get)
 }
