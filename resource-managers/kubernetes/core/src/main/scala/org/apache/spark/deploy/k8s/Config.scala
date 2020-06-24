@@ -152,6 +152,12 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  val KUBERNETES_DRIVER_TOLERATIONS =
+    ConfigBuilder("spark.kubernetes.driver.tolerations")
+      .doc("Specify the tolerations for the driver pod (eg. 'key=value:effect,...')")
+      .stringConf
+      .createOptional
+
   val KUBERNETES_DRIVER_SUBMIT_CHECK =
     ConfigBuilder("spark.kubernetes.submitInDriver")
     .internal()
@@ -177,6 +183,12 @@ private[spark] object Config extends Logging {
     ConfigBuilder("spark.kubernetes.executor.request.cores")
       .doc("Specify the cpu request for each executor pod")
       .version("2.4.0")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_EXECUTOR_TOLERATIONS =
+    ConfigBuilder("spark.kubernetes.executor.tolerations")
+      .doc("Specify the tolerations for each executor pod (eg. 'key=value:effect,...')")
       .stringConf
       .createOptional
 
