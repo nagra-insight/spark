@@ -73,6 +73,9 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       ResourceProfile.MEMORY_OVERHEAD_MIN_MIB))
   private val driverMemoryWithOverheadMiB = driverMemoryMiB + memoryOverheadMiB
 
+  // Tolerations
+  private val driverTolerations = conf.get(KUBERNETES_DRIVER_TOLERATIONS)
+
   override def configurePod(pod: SparkPod): SparkPod = {
     val driverCustomEnvs = (Seq(
       (ENV_APPLICATION_ID, conf.appId)
@@ -147,6 +150,7 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       .editOrNewSpec()
         .withRestartPolicy("Never")
         .addToNodeSelector(conf.nodeSelector.asJava)
+        .addToTolerations(KubernetesUtils.parseTolerations(driverTolerations.getOrElse("")): _*)
         .addToImagePullSecrets(conf.imagePullSecrets: _*)
         .endSpec()
       .build()

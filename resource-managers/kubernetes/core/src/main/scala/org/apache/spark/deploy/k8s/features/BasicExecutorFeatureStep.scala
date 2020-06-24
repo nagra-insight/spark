@@ -89,6 +89,9 @@ private[spark] class BasicExecutorFeatureStep(
     }.toMap
   }
 
+  // Tolerations
+  private val executorTolerations = kubernetesConf.get(KUBERNETES_EXECUTOR_TOLERATIONS)
+
   override def configurePod(pod: SparkPod): SparkPod = {
     val name = s"$executorPodNamePrefix-exec-${kubernetesConf.executorId}"
     val configMapName = KubernetesClientUtils.configMapNameExecutor
@@ -256,6 +259,7 @@ private[spark] class BasicExecutorFeatureStep(
         .withHostname(hostname)
         .withRestartPolicy("Never")
         .addToNodeSelector(kubernetesConf.nodeSelector.asJava)
+        .addToTolerations(KubernetesUtils.parseTolerations(executorTolerations.getOrElse("")): _*)
         .addToImagePullSecrets(kubernetesConf.imagePullSecrets: _*)
         .addNewVolume()
           .withName(SPARK_CONF_VOLUME_EXEC)
