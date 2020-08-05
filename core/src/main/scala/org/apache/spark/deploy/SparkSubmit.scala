@@ -308,21 +308,31 @@ private[spark] class SparkSubmit extends Logging {
         args.ivySettingsPath)
 
       if (!StringUtils.isBlank(resolvedMavenCoordinates)) {
-        // In K8s client mode, when in the driver, add resolved jars early as we might need
-        // them at the submit time for artifact downloading.
-        // For example we might use the dependencies for downloading
-        // files from a Hadoop Compatible fs eg. S3. In this case the user might pass:
-        // --packages com.amazonaws:aws-java-sdk:1.7.4:org.apache.hadoop:hadoop-aws:2.7.6
-        if (isKubernetesClusterModeDriver) {
-          val loader = getSubmitClassLoader(sparkConf)
-          for (jar <- resolvedMavenCoordinates.split(",")) {
-            addJarToClasspath(jar, loader)
-          }
-        } else if (isKubernetesCluster) {
+        if (isKubernetesCluster) {
           // We need this in K8s cluster mode so that we can upload local deps
           // via the k8s application, like in cluster mode driver
           childClasspath ++= resolvedMavenCoordinates.split(",")
         } else {
+          // In K8s client mode, when in the driver, add resolved jars early as we might need
+          // them at the submit time for artifact downloading.
+          // For example we might use the dependencies for downloading
+          // files from a Hadoop Compatible fs eg. S3. In this case the user might pass:
+          // --packages com.amazonaws:aws-java-sdk:1.7.4:org.apache.hadoop:hadoop-aws:2.7.6
+          //
+          // Sam: it seems that we still have to add the resolvedMavenCoordinates to args.jars
+          // when in the driver so that the executors can actually also download the required
+          // dependencies. That's why I moved the `if` here so that the mergeFileLists is still
+          // happening.
+          // Otherwise, even with the file available through the Spark file server, the executors
+          // cannot know they have to download them... I might be missing something (my
+          // understanding of this whole process is very parial) but this fix adresses our issues.
+          if (isKubernetesClusterModeDriver) {
+            val loader = getSubmitClassLoader(sparkConf)
+            for (jar <- resolvedMavenCoordinates.split(",")) {
+              addJarToClasspath(jar, loader)
+            }
+          }
+
           args.jars = mergeFileLists(args.jars, resolvedMavenCoordinates)
           if (args.isPython || isInternal(args.primaryResource)) {
             args.pyFiles = mergeFileLists(args.pyFiles, resolvedMavenCoordinates)
